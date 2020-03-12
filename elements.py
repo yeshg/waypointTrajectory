@@ -144,7 +144,7 @@ class Robot:
         # thetas are the yaw angle of the robot
         thetas_rotated = self.thetas # no rotation for now
         # center of mass position is x y position converted to meters, with constant z height
-        positions_in_meters = np.array( [[self.trajectory[i][0] / px_2_m - self.trajectory[0][0] / px_2_m, self.trajectory[i][1] / px_2_m - self.trajectory[0][1] / px_2_m] for i in range(len(self.trajectory))] )
+        positions_in_meters = np.array( [[self.trajectory[i][0] / px_2_m - self.trajectory[0][0] / px_2_m, self.trajectory[i][1] / px_2_m - self.trajectory[0][1] / px_2_m, 1.0] for i in range(len(self.trajectory))] )
         velocities_in_meters = np.array( [self.velocities[i] / px_2_m for i in range(len(self.velocities))] )
 
         print("positions:\n{}\n\nvelocities:\n{}\n\norient:\n{}\n".format(positions_in_meters, velocities_in_meters, thetas_rotated))

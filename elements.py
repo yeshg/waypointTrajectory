@@ -1,23 +1,26 @@
 import pygame
 from pygame.locals import *
-from PID import PIDController
 
 import math
 import numpy as np
 
 
 class Mouse:
-    def __init__(self):
+    def __init__(self, px_2_m):
         self.px = 0
         self.py = 0
         self.vx = 0
         self.vy = 0
         self.radius = 0
         self.color = (100,200,100)
+        self.px_2_m = px_2_m
 
     def get_position(self):
         return (self.px, self.py)
     
+    def get_m_position(self):
+        return (self.px / self.px_2_m, self.py / self.px_2_m)
+
     def get_velocity(self):
         return (self.vx, self.vy)
     
@@ -32,112 +35,61 @@ class Mouse:
         pygame.draw.circle(screen, self.color, (self.px, self.py), self.radius)
     
 class Robot:
-    def __init__(self, trajectory, time_passed):
-        self.px = trajectory[0][0]
-        self.py = trajectory[0][1]
-
+    def __init__(self, trajectory, time_passed, frequency):
+        
         # action space is forward velocity and heading
-        self.vel = 0.0
-        self.theta = 0.0 # radians
-        self.thetas = []
-        self.velocities = []
+        self.positions = trajectory.positions
+        self.velocities = trajectory.vels
+        self.thetas = trajectory.thetas
+        self.trajlen = len(trajectory.positions)
+        
+        # ground truth's position:
+        self.t_px = int(self.positions[0][0])
+        self.t_py = int(self.positions[0][1])
 
-        # save previous and have hard limits for max velocity and angle change
-        # self.prev_vel = 0.0
-        # self.prev_theta = 0.0
-        # self.max_dvel = 0.05
-        # self.max_dtheta = 0.05
-
-        # PID controllers for velocity and angle
-        self.pid_vel = PIDController(3, 0, 0)
-        self.pid_theta = PIDController(3, 0, 0)
+        # follower's pos
+        self.f_px = int(self.positions[0][0])
+        self.f_py = int(self.positions[0][1])
 
         self.radius = 10
-        self.color = (100,100,230)
+        self.color = (50,50,200) # direct position tracker
+        self.color2 = (200,50,50)  # velocity + angle tracker
         
-        self.trajectory = trajectory
-        self.prev_time = time_passed
-
+        self.frequency = frequency
+        self.prev_time = self.prev_inc_time = time_passed
         self.counter = 0
         self.count_inc = 1
-    
-    # def update(self,time_passed):
-    #     t_idx = min(int(time_passed), len(self.trajectory) - 1)
-    #     time_interval = time_passed - self.prev_time
-    #     traj_position = self.trajectory[t_idx]
-
-    #     # setpoint is current angle from robot to next point in trajectory
-    #     # the robot's angle is the current value
-    #     desired_angle = math.atan2(traj_position[1] - self.py, traj_position[0] - self.px)
-    #     self.theta = math.atan2(self.py, self.px)
-    #     self.omega = self.pid_theta.get_u(desired_angle, self.theta)
-
-    #     # forward velocity should be proportional to euclidean distance from goal
-    #     fvel = 0.3 * np.sqrt(np.power(traj_position[1] - self.py, 2) + np.power(traj_position[0] - self.px, 2))
-
-    #     # change the vx and vy
-    #     vx = np.sin(self.theta + self.omega) * fvel
-    #     vy = np.cos(self.theta + self.omega) * fvel
-
-    #     # # output of PID controller is a change in translational velocity (a vector)
-    #     # self.vx, self.vy = self.pid_controller.get_u(traj_position, current_value)
-
-    #     # # use this vector to find dtheta, and limit it to self.max_detha
-    #     # theta = math.atan2(self.vy, self.vx)
-    #     # dtheta = theta - self.prev_theta
-    #     # if abs(dtheta) > self.max_dtheta:
-    #     #     new_vx = self.vx * math.cos(theta - self.max_dtheta) - self.vy * math.sin(theta - self.max_dtheta)
-    #     #     new_vy = self.vx * math.sin(theta - self.max_dtheta) + self.vy * math.cos(theta - self.max_dtheta)
-    #     #     self.vx, self.vy = new_vx, new_vy
-    #     #     theta = math.atan2(self.vy, self.vx)
-    #     #     dtheta = abs(theta - self.prev_theta)
-    #     # print(dtheta)
-
-    #     # # get the magnitude of this vector and limit it to self.max_dvel
-    #     # vel = np.sqrt(np.power(self.vx, 2) + np.power(self.vy, 2))
-    #     # dvel = vel - self.prev_vel
-    #     # if abs(dvel) > self.max_dvel:
-    #     #     # divide vector components by as much is necessary to limit magnitude to 0.05
-    #     #     self.vx = self.vx / vel * self.max_dvel
-    #     #     self.vy = self.vy / vel * self.max_dvel
-
-    #     # robot's action space is forward velocity and angle
-    #     self.px = int(self.px + vx*time_interval)
-    #     self.py = int(self.py + vy*time_interval)
-    #     # print("{}, {}".format(self.px, self.py))
-    #     self.prev_time = time_passed
 
     def update(self,time_passed):
-        # t_idx = min(int(time_passed), len(self.trajectory) - 1)
-        t_idx = self.counter
-        time_interval = time_passed - self.prev_time
-        traj_position = self.trajectory[self.counter]
 
-        # setpoint is current angle from robot to next point in trajectory
-        # the robot's angle is the current value
-        desired_value = traj_position
-        current_value = (self.px, self.py)
-        self.vx = self.pid_vel.get_u(desired_value[0], current_value[0])
-        self.vy = self.pid_vel.get_u(desired_value[1], current_value[1])
+        curr_vel = self.velocities[self.counter]
+        curr_theta = self.thetas[self.counter]
+        track_pos = self.positions[self.counter]
 
-        self.velocity = np.sqrt(np.power(self.vx, 2) + np.power(self.vy, 2))
+        # print((curr_vel, curr_theta, np.cos(curr_theta), np.sin(curr_theta)))
 
-        # robot's action space is forward velocity and angle
-        self.px = int(self.px + self.vx*time_interval)
-        self.py = int(self.py + self.vy*time_interval)
-        # print("{}, {}".format(self.px, self.py))
+        # ground truth's new position:
+        self.t_px, self.t_py = track_pos[0], track_pos[1]
+
+        # follower's new position: execute angle and velocity command for time passed
+        t_diff = time_passed - self.prev_time
+        vx, vy = curr_vel * np.cos(curr_theta), curr_vel * np.sin(curr_theta)
+        # ax, ay = curr_accel * np.cos(curr_theta), curr_accel * np.sin(curr_theta)
+        # gotta subtract the y velocity add because pygame counts y from top down
+        # self.f_px, self.f_py = self.f_px + vx * t_diff + 0.5 * ax * t_diff**2, self.f_py - vy * t_diff + 0.5 * ay * t_diff**2
+        self.f_px, self.f_py = self.f_px + vx * t_diff, self.f_py - vy * t_diff
+
+        # increment t_idx on 30 Hz cycle
+        if time_passed - self.prev_inc_time > (1 / self.frequency):
+            self.counter += 1
+            self.prev_inc_time = time_passed
+
         self.prev_time = time_passed
-        # if self.counter == 0 or self.counter == len(self.trajectory) - 1:
-        #     self.count_inc *= -1
 
-        # calculate angle and append to logging list
-        self.theta = math.atan2(self.vy, self.vx)
-
-        if self.counter < len(self.trajectory) - 1:
-            self.counter += self.count_inc
-            self.thetas.append(self.theta)
-            self.velocities.append(self.velocity)
-            # print(self.velocity)
+        # check if we need to restart
+        if self.counter == self.trajlen:
+            self.counter = 0
+            self.f_px, self.f_py = int(self.positions[0][0]),int(self.positions[0][1])
 
     def return_info(self, px_2_m):
 
@@ -152,8 +104,9 @@ class Robot:
         return positions_in_meters, velocities_in_meters, thetas_rotated
 
     def render(self,screen):
-        pygame.draw.circle(screen,self.color,(self.px,self.py),self.radius)
-        pygame.transform.rotate(screen, np.radians(self.theta))
+        pygame.draw.circle(screen,self.color,(int(self.t_px),int(self.t_py)),self.radius)
+        pygame.draw.circle(screen,self.color2,(int(self.f_px),int(self.f_py)),self.radius)
+        # pygame.transform.rotate(screen, np.radians(self.theta))
 
 class Waypoint:
     def __init__(self, mouse_position):
@@ -169,13 +122,53 @@ class Waypoint:
         pygame.draw.circle(screen, self.color, (self.px, self.py), self.radius)
 
 class Trajectory:
-    def __init__(self, positions):
+    def __init__(self, t_new, positions, thetas, vels):
+        self.param = t_new
         self.positions = positions
+        self.thetas = thetas
+        self.vels = vels
         self.width = 2
         self.color = (100,200,100)
+        self.arrow_color = (200,200,200)
+        self.arrow_length = 20.0
     
     def render(self, screen):
+        scaled_vels = self.vels / np.max(self.vels) * self.arrow_length
+        pygame_poses = []
         for i in range(len(self.positions)):
             # pygame.draw.aaline(screen, self.color, self.positions[i-1], self.positions[i])
             # print(self.positions[i])
-            pygame.draw.circle(screen, self.color, (int(self.positions[i][0]),int(self.positions[i][1])), self.width)
+            pygame_poses.append((int(self.positions[i][0]), int(self.positions[i][1])))
+            # circle for pos
+            pygame.draw.circle(screen, self.color, pygame_poses[-1], self.width)
+        for i in range(len(self.thetas)):
+            # calculate next pos
+            pos2 = (pygame_poses[i][0] + scaled_vels[i] * np.cos(self.thetas[i]) , pygame_poses[i][1] - scaled_vels[i] * np.sin(self.thetas[i]))
+            # arrow for angle and vel
+            pygame.draw.line(screen, self.arrow_color, pygame_poses[i], pos2)
+    
+    def convert_to_meters(self, scale_factor, screen_height):
+
+        self.positions = [[self.positions[i][0] / scale_factor, (screen_height - self.positions[i][1]) / scale_factor, 1.0] for i in range(len(self.positions))]
+
+        self.vels = [self.vels[i] / scale_factor for i in range(len(self.vels))]
+
+        print("positions:\n{}\n\nvelocities:\n{}\n\norient:\n{}\n".format(self.positions[-5:], self.vels[-5:], self.thetas[-5:]))
+        print("max vel: {}".format(np.max(self.vels)))
+
+class Grid:
+    def __init__(self, screen_width, screen_height, px_2_m):
+        self.px_2_m = px_2_m
+        self.screen_height = screen_height
+        self.screen_width = screen_width
+        self.cell_height = px_2_m  # approx height of 1m x 1m cell
+        self.cell_width = px_2_m   # approx width of 1m x 1m cell
+        self.color = (90,90,90)
+    
+    def render(self, screen):
+        # draw vertical lines
+        for x in range(self.screen_height // self.px_2_m):
+            pygame.draw.line(screen, self.color, (x * self.cell_width,0), (x * self.cell_width,self.screen_height))
+        # draw horizontal lines
+        for y in range(self.screen_width // self.px_2_m):
+            pygame.draw.line(screen, self.color, (0, y * self.cell_height), (self.screen_width, y * self.cell_height))

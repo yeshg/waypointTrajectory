@@ -147,13 +147,14 @@ class Trajectory:
             # arrow for angle and vel
             pygame.draw.line(screen, self.arrow_color, pygame_poses[i], pos2)
     
-    def convert_to_meters(self, scale_factor, screen_height):
+    def prepare_for_export(self, scale_factor, screen_height):
 
         self.positions = [[self.positions[i][0] / scale_factor, (screen_height - self.positions[i][1]) / scale_factor, 1.0] for i in range(len(self.positions))]
+        self.positions = [[self.positions[i][0]-self.positions[0][0], self.positions[i][1]-self.positions[0][1], self.positions[i][2]] for i in range(len(self.positions))]
 
         self.vels = [self.vels[i] / scale_factor for i in range(len(self.vels))]
 
-        print("positions:\n{}\n\nvelocities:\n{}\n\norient:\n{}\n".format(self.positions[-5:], self.vels[-5:], self.thetas[-5:]))
+        print("positions:\n{}\n\nvelocities:\n{}\n\norient:\n{}\n".format(self.positions[:5], self.vels[:5], self.thetas[:5]))
         print("max vel: {}".format(np.max(self.vels)))
 
 class Grid:

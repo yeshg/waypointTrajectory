@@ -204,13 +204,13 @@ def pygame_main():
 def main():
 
     trajectory = pygame_main()
-    trajectory.convert_to_meters(PX_2_M, SCREEN_HEIGHT)
+    trajectory.prepare_for_export(PX_2_M, SCREEN_HEIGHT)
 
     command_trajectory = {"compos" : trajectory.positions,
                           "speed"  : trajectory.vels,
                           "orient" : trajectory.thetas}
 
-    with open("command_trajectory_new.pkl", "wb") as f:
+    with open("command_trajectory.pkl", "wb") as f:
         pickle.dump(command_trajectory, f)
         print("wrote pickle file")
 
